@@ -8,7 +8,7 @@ const Header = () => {
       <Flex alignItems="center" maxW="container.xl" mx="auto">
         <Heading size="md">Visual RAG Gallery</Heading>
         <Spacer />
-        <Link href="https://github.com/yourusername/visual-rag" isExternal>
+        <Link href="https://github.com/Shayan5422/visual-rag" isExternal>
           <Button 
             leftIcon={<FaGithub />} 
             variant="outline" 

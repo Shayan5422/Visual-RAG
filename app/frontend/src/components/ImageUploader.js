@@ -9,6 +9,11 @@ import {
   Progress,
   Flex,
   Icon,
+  HStack,
+  Wrap,
+  WrapItem,
+  Image,
+  CloseButton,
 } from '@chakra-ui/react';
 import { FaUpload, FaImage } from 'react-icons/fa';
 import axios from 'axios';
@@ -16,68 +21,100 @@ import axios from 'axios';
 const ImageUploader = ({ onImageUploaded }) => {
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [selectedFiles, setSelectedFiles] = useState([]);
   const toast = useToast();
 
   const onDrop = useCallback(async (acceptedFiles) => {
-    // Only accept image files
-    const file = acceptedFiles[0];
+    // Filter out non-image files
+    const imageFiles = acceptedFiles.filter(file => file.type.startsWith('image/'));
     
-    if (!file) {
-      return;
-    }
-    
-    // Check if file is an image
-    if (!file.type.startsWith('image/')) {
+    if (imageFiles.length === 0) {
       toast({
         title: 'Invalid file type',
-        description: 'Please upload an image file.',
+        description: 'Please upload image files only.',
         status: 'error',
         duration: 3000,
         isClosable: true,
       });
       return;
     }
-    
+
+    // Update the selected files
+    setSelectedFiles(prev => [...prev, ...imageFiles]);
+  }, [toast]);
+  
+  const removeFile = (index) => {
+    setSelectedFiles(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const uploadImages = async () => {
+    if (selectedFiles.length === 0) {
+      toast({
+        title: 'No images selected',
+        description: 'Please select at least one image to upload.',
+        status: 'warning',
+        duration: 3000,
+        isClosable: true,
+      });
+      return;
+    }
+
     setUploading(true);
     setUploadProgress(0);
-    
-    const formData = new FormData();
-    formData.append('file', file);
     
     try {
       // Simulate progress during upload
       const progressInterval = setInterval(() => {
         setUploadProgress((prev) => {
-          const newProgress = prev + 10;
+          const newProgress = prev + 5;
           return newProgress >= 90 ? 90 : newProgress;
         });
       }, 300);
       
-      // Upload image to server
-      const response = await axios.post('/api/upload', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-      });
+      const uploadedImages = [];
+      
+      // Upload each image sequentially
+      for (const file of selectedFiles) {
+        const formData = new FormData();
+        formData.append('file', file);
+        
+        // Upload image to server
+        const response = await axios.post('/api/upload', formData, {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+          },
+        });
+        
+        uploadedImages.push(response.data);
+      }
       
       clearInterval(progressInterval);
       setUploadProgress(100);
       
-      // Notify parent component
-      onImageUploaded(response.data);
+      // Notify parent component with all uploaded images
+      uploadedImages.forEach(image => onImageUploaded(image));
       
       // Reset uploader after a delay
       setTimeout(() => {
         setUploading(false);
         setUploadProgress(0);
+        setSelectedFiles([]);
       }, 1000);
       
+      toast({
+        title: 'Upload successful',
+        description: `Successfully uploaded ${uploadedImages.length} image${uploadedImages.length > 1 ? 's' : ''}.`,
+        status: 'success',
+        duration: 5000,
+        isClosable: true,
+      });
+      
     } catch (error) {
-      console.error('Error uploading image:', error);
+      console.error('Error uploading images:', error);
       
       toast({
         title: 'Upload failed',
-        description: error.response?.data?.detail || 'Failed to upload the image.',
+        description: error.response?.data?.detail || 'Failed to upload the images.',
         status: 'error',
         duration: 5000,
         isClosable: true,
@@ -86,21 +123,21 @@ const ImageUploader = ({ onImageUploaded }) => {
       setUploading(false);
       setUploadProgress(0);
     }
-  }, [toast, onImageUploaded]);
+  };
   
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
     accept: {
       'image/*': [],
     },
-    multiple: false,
+    multiple: true,
     disabled: uploading,
   });
   
   return (
     <VStack spacing={4} align="stretch">
       <Text fontWeight="bold" fontSize="lg">
-        Upload New Image
+        Upload New Images
       </Text>
       
       <Box
@@ -136,7 +173,7 @@ const ImageUploader = ({ onImageUploaded }) => {
           ) : (
             <>
               <Text fontWeight="medium">
-                {isDragActive ? 'Drop the image here' : 'Drag & drop image here'}
+                {isDragActive ? 'Drop the images here' : 'Drag & drop images here'}
               </Text>
               <Text fontSize="sm" color="gray.500">
                 or click to browse
@@ -145,6 +182,42 @@ const ImageUploader = ({ onImageUploaded }) => {
           )}
         </VStack>
       </Box>
+
+      {selectedFiles.length > 0 && (
+        <Box borderWidth={1} borderRadius="md" p={2}>
+          <Text fontWeight="medium" mb={2}>
+            Selected images: {selectedFiles.length}
+          </Text>
+          <Wrap spacing={2}>
+            {selectedFiles.map((file, index) => (
+              <WrapItem key={index}>
+                <Box position="relative">
+                  <Image
+                    src={URL.createObjectURL(file)}
+                    alt={`Preview ${index}`}
+                    boxSize="80px"
+                    objectFit="cover"
+                    borderRadius="md"
+                  />
+                  <CloseButton
+                    size="sm"
+                    position="absolute"
+                    top={-2}
+                    right={-2}
+                    bg="red.500"
+                    color="white"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      removeFile(index);
+                    }}
+                    disabled={uploading}
+                  />
+                </Box>
+              </WrapItem>
+            ))}
+          </Wrap>
+        </Box>
+      )}
       
       {uploading && (
         <Progress
@@ -156,22 +229,34 @@ const ImageUploader = ({ onImageUploaded }) => {
         />
       )}
       
-      <Button
-        leftIcon={<FaUpload />}
-        colorScheme="brand"
-        isDisabled={uploading}
-        onClick={() => document.getElementById('fileInput').click()}
-      >
-        Select Image
-      </Button>
+      <HStack>
+        <Button
+          leftIcon={<FaUpload />}
+          colorScheme="brand"
+          isDisabled={uploading}
+          onClick={() => document.getElementById('fileInput').click()}
+          flex="1"
+        >
+          Select Images
+        </Button>
+        <Button
+          colorScheme="green"
+          isDisabled={uploading || selectedFiles.length === 0}
+          onClick={uploadImages}
+          flex="1"
+        >
+          Upload {selectedFiles.length > 0 ? `(${selectedFiles.length})` : ''}
+        </Button>
+      </HStack>
       <input
         type="file"
         id="fileInput"
         accept="image/*"
+        multiple
         style={{ display: 'none' }}
         onChange={(e) => {
           if (e.target.files && e.target.files.length > 0) {
-            onDrop([e.target.files[0]]);
+            onDrop(Array.from(e.target.files));
           }
         }}
       />
