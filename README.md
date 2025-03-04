@@ -33,7 +33,7 @@ This application consists of:
 ### 1. Clone the repository
 
 ```
-git clone https://github.com/yourusername/visual-rag.git
+git clone https://github.com/Shayan5422/visual-rag.git
 cd visual-rag
 ```
 
